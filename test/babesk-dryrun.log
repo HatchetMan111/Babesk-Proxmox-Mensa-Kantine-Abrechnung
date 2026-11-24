@@ -1,0 +1,23 @@
+[babesk] Dry-Run: überspringe Root-/PVE-Checks
+[babesk] Dry-Run: Template local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst wird als vorhanden angenommen
+[babesk] Nächste freie CT-ID: 100
+[babesk] Erstelle LXC 100 (Hostname: babesk, 2 vCPU, 2048 MB RAM, 8 GB Disk, unprivileged=1, onboot=1)
+[dry-run] pct create 100 local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst -hostname babesk -storage local-lvm -rootfs 8G -cores 2 -memory 2048 -net0 name=eth0,bridge=vmbr0,ip=dhcp -unprivileged 1 -onboot 1 -features nesting=0,keyctl=1
+[dry-run] pct start 100
+[babesk] Warte auf Boot des Containers ...
+[dry-run] pct push 100 /tmp/babesk-inner.sh /tmp/babesk-inner.sh
+[dry-run] pct exec 100 -- env DB_NAME=babesk DB_USER=babesk DB_PASS=*** APP_DIR=/opt/babesk APP_PORT=8080 REPO_URL=https://github.com/LinuCC/babesk.git bash /tmp/babesk-inner.sh
+[babesk] Verifikation: Service-Status und HTTP-Check ...
+[dry-run] pct exec 100 -- systemctl is-active babesk   -> active (simuliert)
+[dry-run] pct exec 100 -- curl -fsS http://localhost:8080/   -> HTTP 200 (simuliert)
+
+===============================================================
+ babesk wurde installiert.
+   Container-ID : 100  (Hostname: babesk, onboot=1)
+   Web-UI       : http://10.0.0.100 (simuliert):8080/
+   Admin-Login  : im babesk-Adminbereich anlegen (siehe README im Repo)
+   DB           : babesk / Benutzer: babesk (Passwort wird nur bei Erzeugung generiert)
+   Service      : systemctl status babesk (im CT: pct exec 100 -- systemctl status babesk)
+   Debug-Log    : BABESK_DEBUG=1 bash -x install/babesk.sh 2>&1 | tee babesk-install-debug.log
+===============================================================
+[babesk] Fertig.

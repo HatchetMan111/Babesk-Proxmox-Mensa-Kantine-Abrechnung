@@ -1,0 +1,16 @@
+[Unit]
+Description=babesk - Bargeldloses Bestellsystem für Schulkantinen
+After=network-online.target mariadb.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/babesk/code
+ExecStart=/usr/bin/php -S 0.0.0.0:8080 -t /opt/babesk/code
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

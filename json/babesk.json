@@ -1,0 +1,21 @@
+{
+  "name": "babesk",
+  "slug": "babesk",
+  "type": "lxc",
+  "description": "babesk - Bargeldloses Bestellsystem für Schulkantinen (Open Source, PHP/MySQL). Web-UI auf Port 8080.",
+  "repo": "https://github.com/LinuCC/babesk",
+  "website": "http://www.linu.cc/babesk/",
+  "icon": "",
+  "os": "debian-12",
+  "arch": "amd64",
+  "resources": {
+    "cores": 2,
+    "ram_mb": 2048,
+    "disk_gb": 8
+  },
+  "port": 8080,
+  "install_script": "install/babesk.sh",
+  "privileged": false,
+  "onboot": true,
+  "notes": "Upstream-Repo ist legacy (letzte Commits 2015, PHP 5.3+). Vor Produktivbetrieb Fork modernisieren oder Maintained Fork verwenden."
+}

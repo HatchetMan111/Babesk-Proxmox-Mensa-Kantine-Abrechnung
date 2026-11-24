@@ -163,6 +163,7 @@ write_inner_script() {
 # Wird per 'pct push' in den Container kopiert und dort ausgeführt.
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
+export LC_ALL=C
 
 echo "[inner] apt update + Installation der Abhängigkeiten (PHP, MariaDB, git, ufw) ..."
 apt-get update
@@ -170,7 +171,27 @@ apt-get install -y --no-install-recommends \
   php-cli php-gd php-mysql php-mbstring php-xml php-curl php-zip \
   mariadb-server git curl ca-certificates ufw apache2
 
-systemctl enable --now mariadb
+echo "[inner] MariaDB vorbereiten und starten ..."
+# In LXC scheitert 'systemctl start mariadb' gern an fehlendem /run/mysqld.
+mkdir -p /run/mysqld && chown mysql:mysql /run/mysqld
+systemctl enable mariadb 2>/dev/null || true
+if ! systemctl start mariadb 2>/dev/null; then
+  echo "[inner] systemctl start mariadb fehlgeschlagen, Fallback: service mariadb start ..."
+  service mariadb start || true
+fi
+# Auf Socket warten (bis 60 s)
+ok=""
+for i in $(seq 1 30); do
+  if mysqladmin ping >/dev/null 2>&1; then ok=1; break; fi
+  sleep 2
+done
+if [ -z "$ok" ]; then
+  echo "[inner] FEHLER: MariaDB-Socket nicht erreichbar. Journal-Auszug:"
+  journalctl -u mariadb -n 50 --no-pager || true
+  service mariadb status || true
+  exit 1
+fi
+echo "[inner] MariaDB läuft."
 
 echo "[inner] Datenbank '${DB_NAME}' anlegen ..."
 mysql <<SQL

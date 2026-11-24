@@ -132,7 +132,7 @@ create_ct() {
   pct create "$CT_ID" "$CT_TEMPLATE" \
     -hostname "$CT_HOSTNAME" \
     -storage "$CT_STORAGE" \
-    -rootfs "${CT_DISK_GB}G" \
+    -rootfs "${CT_STORAGE}:${CT_DISK_GB}" \
     -cores "$CT_CORES" \
     -memory "$CT_RAM_MB" \
     -net0 "$netconf" \

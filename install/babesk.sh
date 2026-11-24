@@ -72,6 +72,7 @@ die()  { printf '\033[1;31m[babesk FEHLER]\033[0m %s\n' "$*" >&2; exit 1; }
 # ---------------- Dry-Run-Stubs (Test ohne Proxmox) ----------------
 if [ "$DRY_RUN" = "1" ]; then
   pct() { echo "[dry-run] pct $*"; }
+  qm() { echo "[dry-run] qm $*"; }
   pveam() { echo "[dry-run] pveam $*"; }
 fi
 
@@ -98,18 +99,29 @@ check_storage() {
 }
 
 # ---------------- Nächste freie CT-ID ----------------
+# Eine ID gilt als belegt, wenn sie als CT (pct list) ODER als VM (qm list)
+# existiert. 'pct status <id>' allein reicht nicht, denn für eine VM-ID
+# liefert es einen Fehler und täuscht "frei" vor.
+id_in_use() {
+  local id="$1"
+  if [ "$DRY_RUN" = "1" ]; then return 1; fi
+  pct list 2>/dev/null | awk 'NR>1{print $1}' | grep -qx "$id" && return 0
+  qm list 2>/dev/null | awk 'NR>1{print $1}' | grep -qx "$id" && return 0
+  return 1
+}
+
 next_free_ctid() {
   local id
   if [ "$DRY_RUN" = "1" ]; then echo 100; return 0; fi
   for id in $(seq 100 999); do
-    if ! pct status "$id" >/dev/null 2>&1; then echo "$id"; return 0; fi
+    if ! id_in_use "$id"; then echo "$id"; return 0; fi
   done
   return 1
 }
 
 ct_exists() {
   [ "$DRY_RUN" = "1" ] && return 1
-  pct status "$1" >/dev/null 2>&1
+  pct list 2>/dev/null | awk 'NR>1{print $1}' | grep -qx "$1"
 }
 
 # ---------------- Container anlegen / starten ----------------

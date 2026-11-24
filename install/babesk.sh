@@ -5,8 +5,10 @@
 # Installiert babesk ("Bargeldloses Bestellsystem für Schulkantinen",
 # https://github.com/LinuCC/babesk) als LXC-Container auf einem Proxmox VE Host.
 #
-# Einzeiler (als root auf dem Proxmox-Host ausführen):
-#   bash -c "$(wget -qLO - https://raw.githubusercontent.com/USER/REPO/main/install/babesk.sh)"
+# Einzeiler (als root auf dem Proxmox-Host ausführen, an Commit gepinnt gegen CDN-Cache):
+#   bash -c "$(wget -qLO - https://raw.githubusercontent.com/HatchetMan111/Babesk-Proxmox-Mensa-Kantine-Abrechnung/cea929efb42bacd52231f2c552f931ed9764a24a/install/babesk.sh)"
+# ungepinnt (main, kann CDN-Cache liefern):
+#   bash -c "$(wget -qLO - https://raw.githubusercontent.com/HatchetMan111/Babesk-Proxmox-Mensa-Kantine-Abrechnung/main/install/babesk.sh)"
 #
 # Optionen (Umgebungsvariablen, alle optional):
 #   BABESK_CT_ID=120        feste Container-ID (Standard: nächste freie ID)

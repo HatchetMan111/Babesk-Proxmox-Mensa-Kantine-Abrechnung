@@ -6,11 +6,17 @@ Installiert [babesk](https://github.com/LinuCC/babesk) (Bargeldloses Bestellsyst
 
 ## Einzeiler (als root auf dem Proxmox-Host)
 
+An Commit gepinnt (empfohlen, raw.githubusercontent.com cached `main` teils minutenlang):
+
 ```bash
-bash -c "$(wget -qLO - https://raw.githubusercontent.com/HatchetMan111/Babesk-Proxmox-Mensa-Kantine-Abrechnung/main/install/babesk.sh)"
+bash -c "$(wget -qLO - https://raw.githubusercontent.com/HatchetMan111/Babesk-Proxmox-Mensa-Kantine-Abrechnung/cea929efb42bacd52231f2c552f931ed9764a24a/install/babesk.sh)"
 ```
 
-Ersetze `HatchetMan111/Babesk-Proxmox-Mensa-Kantine-Abrechnung` durch euren Fork dieses Projekts.
+Ungepinnt über `main` (Cache-Buster anhängen, falls eine alte Version geladen wird):
+
+```bash
+bash -c "$(wget -qLO - "https://raw.githubusercontent.com/HatchetMan111/Babesk-Proxmox-Mensa-Kantine-Abrechnung/main/install/babesk.sh?ts=$(date +%s)")"
+```
 
 ## Optionen (Umgebungsvariablen)
 
@@ -28,7 +34,7 @@ Beispiel mit fester ID und statischer IP:
 
 ```bash
 BABESK_CT_ID=120 BABESK_NET="10.0.0.50/24,gw=10.0.0.1" \
-  bash -c "$(wget -qLO - https://raw.githubusercontent.com/HatchetMan111/Babesk-Proxmox-Mensa-Kantine-Abrechnung/main/install/babesk.sh)"
+  bash -c "$(wget -qLO - https://raw.githubusercontent.com/USER/REPO/main/install/babesk.sh)"
 ```
 
 ## Was das Script tut

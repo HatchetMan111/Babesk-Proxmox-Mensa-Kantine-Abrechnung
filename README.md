@@ -9,7 +9,7 @@ Installiert [babesk](https://github.com/LinuCC/babesk) (Bargeldloses Bestellsyst
 An Commit gepinnt (empfohlen, raw.githubusercontent.com cached `main` teils minutenlang):
 
 ```bash
-bash -c "$(wget -qLO - https://raw.githubusercontent.com/HatchetMan111/Babesk-Proxmox-Mensa-Kantine-Abrechnung/729f7053aba0092b22d05a0af8b827d5429d6392/install/babesk.sh)"
+bash -c "$(wget -qLO - https://raw.githubusercontent.com/HatchetMan111/Babesk-Proxmox-Mensa-Kantine-Abrechnung/714546d45e023eded8c7f811fb656eab54aa5cdd/install/babesk.sh)"
 ```
 
 Ungepinnt über `main` (Cache-Buster anhängen, falls eine alte Version geladen wird):

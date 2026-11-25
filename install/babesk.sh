@@ -164,6 +164,9 @@ write_inner_script() {
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 export LC_ALL=C
+# APP_NAME wird vom äußeren Script nicht als Env übergeben -> hier defaulten,
+# sonst bricht 'set -u' bei der Unit-Erzeugung ab.
+APP_NAME="${APP_NAME:-babesk}"
 
 echo "[inner] apt update + Installation der Abhängigkeiten (PHP, MariaDB, git, ufw) ..."
 apt-get update
@@ -185,43 +188,33 @@ echo "[inner] MariaDB vorbereiten und starten ..."
 # In LXC scheitert 'systemctl start mariadb' gern an fehlendem /run/mysqld.
 mkdir -p /run/mysqld && chown mysql:mysql /run/mysqld
 # In (unprivilegierten) LXC-Containern kann systemd keine Mount-Namespaces
-# aufsetzen -> MariaDB startet mit status=226/NAMESPACE nicht. Das komplette
-# Sandboxing/Hardening der Unit per Drop-in abschalten. WICHTIG: auch
-# ProtectProc/ProcSubset leeren, sonst wird /proc neu gemountet
-# (Fehler: "unit-root/proc: Permission denied").
-mkdir -p /etc/systemd/system/mariadb.service.d
-cat > /etc/systemd/system/mariadb.service.d/override.conf <<'OVR'
+# aufsetzen -> MariaDB startet mit status=226/NAMESPACE nicht. Ein bloßes
+# Drop-in mit leeren Werten (ProtectSystem= o.ae.) resetet diese Direktiven in
+# Debian 12 NICHT. Deshalb die Unit komplett durch eine sandbox-freie Version
+# ersetzen (ExecStart wurde per mariadbd-Direktstart verifiziert).
+cat > /etc/systemd/system/mariadb.service <<'UNIT'
+[Unit]
+Description=MariaDB database server (LXC, ohne Sandboxing)
+After=network.target
+
 [Service]
-ProtectSystem=
-ProtectHome=
-ProtectProc=
-ProcSubset=
-PrivateDevices=false
-PrivateTmp=false
-PrivateIPC=false
-ProtectKernelTunables=false
-ProtectKernelLogs=false
-ProtectControlGroups=false
-ProtectClock=false
-ProtectHostname=false
-ReadWritePaths=
-ReadOnlyPaths=
-InaccessiblePaths=
-ExecPaths=
-NoExecPaths=
-BindPaths=
-BindReadOnlyPaths=
-TemporaryFileSystem=
-RestrictAddressFamilies=
-MemoryDenyWriteExecute=false
-LockPersonality=false
-SystemCallFilter=
-SystemCallArchitectures=
-CapabilityBoundingSet=
-OVR
+Type=simple
+User=mysql
+Group=mysql
+RuntimeDirectory=mysqld
+RuntimeDirectoryMode=755
+ExecStart=/usr/sbin/mariadbd --user=mysql --datadir=/var/lib/mysql \
+  --socket=/run/mysqld/mysqld.sock --pid-file=/run/mysqld/mysqld.pid
+Restart=always
+RestartSec=5
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
+UNIT
 systemctl daemon-reload
 # Gegenprobe: welche Namespace-/Sandboxing-Direktiven sind noch aktiv?
-echo "[inner] Aktive Sandboxing-Direktiven (sollten leer/false sein):"
+echo "[inner] Aktive Sandboxing-Direktiven (sollten alle no/empty sein):"
 systemctl show mariadb -p ProtectSystem -p ProtectHome -p ProtectProc -p ProcSubset \
   -p PrivateTmp -p PrivateDevices -p ProtectKernelTunables -p ProtectControlGroups \
   --no-pager 2>/dev/null || true

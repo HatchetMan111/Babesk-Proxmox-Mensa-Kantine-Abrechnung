@@ -425,7 +425,19 @@ run_inner_script() {
     echo "[dry-run] pct exec $CT_ID -- env DB_NAME=$DB_NAME DB_USER=$DB_USER DB_PASS=*** APP_DIR=$APP_DIR APP_PORT=$APP_PORT REPO_URL=$REPO_URL bash /tmp/babesk-inner.sh"
     return 0
   fi
-  pct push "$CT_ID" /tmp/babesk-inner.sh /tmp/babesk-inner.sh
+  # pct push kann direkt nach dem Start an einem noch nicht ganz bereiten
+  # rootfs scheitern -> mit Retry + Existenz-Check absichern.
+  local tries
+  for tries in 1 2 3 4 5; do
+    if pct push "$CT_ID" /tmp/babesk-inner.sh /tmp/babesk-inner.sh 2>/dev/null \
+       && pct exec "$CT_ID" -- test -f /tmp/babesk-inner.sh 2>/dev/null; then
+      break
+    fi
+    warn "pct push nach CT $CT_ID fehlgeschlagen (Versuch $tries), retry in 3 s ..."
+    sleep 3
+  done
+  pct exec "$CT_ID" -- test -f /tmp/babesk-inner.sh 2>/dev/null \
+    || die "Inneres Script konnte nicht in CT $CT_ID abgelegt werden (pct push). Logs: pct enter $CT_ID"
   pct exec "$CT_ID" -- env "DB_NAME=$DB_NAME" "DB_USER=$DB_USER" "DB_PASS=$DB_PASS" \
     "APP_DIR=$APP_DIR" "APP_PORT=$APP_PORT" "REPO_URL=$REPO_URL" bash /tmp/babesk-inner.sh
   pct exec "$CT_ID" -- rm -f /tmp/babesk-inner.sh

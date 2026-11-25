@@ -185,13 +185,17 @@ echo "[inner] MariaDB vorbereiten und starten ..."
 # In LXC scheitert 'systemctl start mariadb' gern an fehlendem /run/mysqld.
 mkdir -p /run/mysqld && chown mysql:mysql /run/mysqld
 # In (unprivilegierten) LXC-Containern kann systemd keine Mount-Namespaces
-# aufsetzen -> MariaDB startet mit status=226/NAMESPACE nicht. Das
-# Sandboxing/Hardening der Unit per Drop-in abschalten.
+# aufsetzen -> MariaDB startet mit status=226/NAMESPACE nicht. Das komplette
+# Sandboxing/Hardening der Unit per Drop-in abschalten. WICHTIG: auch
+# ProtectProc/ProcSubset leeren, sonst wird /proc neu gemountet
+# (Fehler: "unit-root/proc: Permission denied").
 mkdir -p /etc/systemd/system/mariadb.service.d
 cat > /etc/systemd/system/mariadb.service.d/override.conf <<'OVR'
 [Service]
 ProtectSystem=
 ProtectHome=
+ProtectProc=
+ProcSubset=
 PrivateDevices=false
 PrivateTmp=false
 PrivateIPC=false
@@ -201,27 +205,55 @@ ProtectControlGroups=false
 ProtectClock=false
 ProtectHostname=false
 ReadWritePaths=
+ReadOnlyPaths=
+InaccessiblePaths=
+ExecPaths=
+NoExecPaths=
+BindPaths=
+BindReadOnlyPaths=
+TemporaryFileSystem=
 RestrictAddressFamilies=
 MemoryDenyWriteExecute=false
 LockPersonality=false
 SystemCallFilter=
+SystemCallArchitectures=
+CapabilityBoundingSet=
 OVR
 systemctl daemon-reload
+# Gegenprobe: welche Namespace-/Sandboxing-Direktiven sind noch aktiv?
+echo "[inner] Aktive Sandboxing-Direktiven (sollten leer/false sein):"
+systemctl show mariadb -p ProtectSystem -p ProtectHome -p ProtectProc -p ProcSubset \
+  -p PrivateTmp -p PrivateDevices -p ProtectKernelTunables -p ProtectControlGroups \
+  --no-pager 2>/dev/null || true
 systemctl enable mariadb 2>/dev/null || true
 if ! systemctl start mariadb 2>/dev/null; then
   echo "[inner] systemctl start mariadb fehlgeschlagen, Fallback: service mariadb start ..."
   service mariadb start || true
 fi
-# Auf Socket warten (bis 60 s)
+# Auf Socket warten (bis 30 s)
 ok=""
-for i in $(seq 1 30); do
+for i in $(seq 1 15); do
   if mysqladmin ping >/dev/null 2>&1; then ok=1; break; fi
   sleep 2
 done
+# Letzter Fallback: systemd startet MariaDB im LXC partout nicht -> mariadbd
+# direkt als mysql hochziehen, damit die Installation fertig wird.
+if [ -z "$ok" ]; then
+  echo "[inner] MariaDB per systemd nicht erreichbar, starte mariadbd direkt ..."
+  mkdir -p /run/mysqld && chown mysql:mysql /run/mysqld
+  nohup mariadbd --user=mysql --datadir=/var/lib/mysql \
+    --socket=/run/mysqld/mysqld.sock --pid-file=/run/mysqld/mysqld.pid \
+    >/var/log/mariadb-direct.log 2>&1 &
+  for i in $(seq 1 15); do
+    if mysqladmin ping >/dev/null 2>&1; then ok=1; break; fi
+    sleep 2
+  done
+fi
 if [ -z "$ok" ]; then
   echo "[inner] FEHLER: MariaDB-Socket nicht erreichbar. Journal-Auszug:"
   journalctl -u mariadb -n 50 --no-pager || true
   service mariadb status || true
+  tail -n 30 /var/log/mariadb-direct.log 2>/dev/null || true
   exit 1
 fi
 echo "[inner] MariaDB läuft."

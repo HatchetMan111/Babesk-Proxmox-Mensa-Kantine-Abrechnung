@@ -280,6 +280,71 @@ if [ ! -f "${APP_DIR}/dbv/config.php" ] && [ -f "${APP_DIR}/dbv/config.php.sampl
 fi
 chown -R www-data:www-data "$APP_DIR" || true
 
+# ---------------- Datenbank automatisch einspielen ----------------
+# babesk "installiert" sich ueber die dbv-Revisions (Migrationen 1..N): Sie
+# bauen aus einer leeren DB den finalen Stand inkl. Default-Admin (admin/admin)
+# auf und legen die Stored Procedures selbst an. Import als root (unix_socket),
+# Fremdschluessel-Checks aus (Reihenfolge egal), Routinen per DELIMITER wrappen.
+# Schlaegt etwas fehl, wird die DB geleert und auf dbv (Browser) zurueckgefallen.
+echo "[inner] Datenbank automatisch einspielen (dbv-Revisions 1..N) ..."
+# DEFINER root@localhost -> babesk@localhost (nur fuer den dbv-Fallback noetig,
+# der als App-User laeuft; root-Import darf beide setzen).
+find "${APP_DIR}/dbv/data" -name '*.sql' \
+  -exec sed -i 's/DEFINER=`root`@`localhost`/DEFINER=`babesk`@`localhost`/g' {} + 2>/dev/null || true
+import_ok=1
+{
+  echo "SET FOREIGN_KEY_CHECKS=0;"
+  echo "SET NAMES utf8mb4;"
+  for d in $(ls "${APP_DIR}/dbv/data/revisions" 2>/dev/null | sort -n); do
+    for f in "${APP_DIR}"/dbv/data/revisions/"$d"/*.sql; do
+      [ -f "$f" ] || continue
+      if grep -qiE '(^|[^A-Za-z_])BEGIN([^A-Za-z_]|$)' "$f"; then
+        printf 'DELIMITER ;;\n'; cat "$f"; printf '\n;;\nDELIMITER ;\n'
+      else
+        cat "$f"; printf ';\n'
+      fi
+    done
+  done
+  echo "SET FOREIGN_KEY_CHECKS=1;"
+} | mysql -u root "$DB_NAME" || import_ok=0
+
+if [ "$import_ok" = "1" ] && mysql -u root -N -e "SELECT COUNT(*) FROM SystemUsers;" "$DB_NAME" >/dev/null 2>&1; then
+  echo "[inner] Datenbank fertig. Default-Login: admin / admin"
+else
+  echo "[inner] Auto-Import fehlgeschlagen -> Fallback: dbv im Browser (URL /dbv/, Login dbv/dbv)."
+  mysql -u root -e "DROP DATABASE IF EXISTS \`${DB_NAME}\`; CREATE DATABASE \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'localhost'; FLUSH PRIVILEGES;" 2>/dev/null || true
+fi
+
+# dbv im Web-Root erreichbar machen (Fallback-Installer) + freundliche Startseite.
+ln -sfn "${APP_DIR}/dbv" "${APP_DIR}/code/dbv" 2>/dev/null || true
+cat > "${APP_DIR}/code/index.php" <<'INDEX'
+<?php
+// Freundliche babesk-Startseite (wird vom Installer ueberschrieben).
+$dbv = is_dir(__DIR__ . '/dbv');
+$installed = is_dir(__DIR__ . '/installation');
+header('Content-Type: text/html; charset=utf-8');
+?>
+<!doctype html><html lang="de"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>babesk</title>
+<style>
+ body{font-family:system-ui,Segoe UI,Roboto,sans-serif;background:#0f172a;color:#e2e8f0;margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center}
+ .card{background:#1e293b;padding:2rem 2.5rem;border-radius:16px;max-width:460px;box-shadow:0 10px 40px rgba(0,0,0,.4)}
+ h1{margin:0 0 .25rem;font-size:1.6rem} .sub{color:#94a3b8;margin:0 0 1.5rem}
+ a.btn{display:block;text-decoration:none;color:#0f172a;background:#a3e635;padding:.8rem 1rem;border-radius:10px;margin:.5rem 0;font-weight:600}
+ a.btn.alt{background:#334155;color:#e2e8f0} .hint{font-size:.85rem;color:#94a3b8;margin-top:1rem}
+ code{background:#0f172a;padding:.1rem .35rem;border-radius:5px}
+</style></head><body><div class="card">
+ <h1>babesk</h1><p class="sub">Bargeldloses Bestellsystem für Schulkantinen</p>
+ <a class="btn" href="web/index.php">Web-Frontend öffnen</a>
+ <a class="btn alt" href="administrator/index.php">Administrator-Frontend</a>
+ <a class="btn alt" href="dbv/">Datenbank-Setup (nur falls oben kein Login klappt)</a>
+ <p class="hint">Administrator-Login nach dem Setup: <code>admin</code> / <code>admin</code>.
+ <?php if (!$installed): ?>Die Datenbank ist noch nicht eingerichtet — bitte oben „Datenbank-Setup" ausführen und die Revisions anwenden.<?php endif; ?></p>
+</div></body></html>
+INDEX
+chown www-data:www-data "${APP_DIR}/code/index.php" 2>/dev/null || true
+
 echo "[inner] PHP-8-Polyfill für legacy-Code (create_function/each) schreiben ..."
 cat > "${APP_DIR}/php8-polyfill.php" <<'PHP'
 <?php
@@ -372,7 +437,8 @@ verify() {
   echo " babesk wurde installiert."
   echo "   Container-ID : $CT_ID  (Hostname: $CT_HOSTNAME, onboot=1)"
   echo "   Web-UI       : http://${ip}:${APP_PORT}/"
-  echo "   Admin-Login  : im babesk-Adminbereich anlegen (siehe README im Repo)"
+  echo "   Admin-Login  : http://${ip}:${APP_PORT}/administrator/  (Default: admin / admin)"
+  echo "   DB-Setup     : bei Auto-Import-FEHLER -> http://${ip}:${APP_PORT}/dbv/ (Login dbv/dbv)"
   echo "   DB           : ${DB_NAME} / Benutzer: ${DB_USER} (Passwort wird nur bei Erzeugung generiert)"
   echo "   Service      : systemctl status ${APP_NAME} (im CT: pct exec ${CT_ID} -- systemctl status ${APP_NAME})"
   echo "   Debug-Log    : BABESK_DEBUG=1 bash -x $0 2>&1 | tee babesk-install-debug.log"

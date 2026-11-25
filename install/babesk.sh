@@ -267,16 +267,27 @@ else
 fi
 
 echo "[inner] Konfigurationsdateien aus Vorlagen erzeugen ..."
+# databaseValues.php.orig ist XML mit LEEREN Tags (<username></username> ...) -
+# keine USERNAME/PASSWORD/DATABASE-Platzhalter. Die leeren Tags befuellen.
 if [ ! -f "${APP_DIR}/code/include/sql_access/databaseValues.php" ] && [ -f "${APP_DIR}/code/include/sql_access/databaseValues.php.orig" ]; then
   cp "${APP_DIR}/code/include/sql_access/databaseValues.php.orig" "${APP_DIR}/code/include/sql_access/databaseValues.php"
-  sed -i -e "s/localhost/localhost/" \
-         -e "s/USERNAME/${DB_USER}/" -e "s/PASSWORD/${DB_PASS}/" -e "s/DATABASE/${DB_NAME}/" \
-         "${APP_DIR}/code/include/sql_access/databaseValues.php" || true
+  sed -i \
+    -e "s#<host></host>#<host>localhost</host>#" \
+    -e "s#<name></name>#<name>${DB_NAME}</name>#" \
+    -e "s#<username></username>#<username>${DB_USER}</username>#" \
+    -e "s#<password></password>#<password>${DB_PASS}</password>#" \
+    "${APP_DIR}/code/include/sql_access/databaseValues.php" || true
 fi
+# dbv/config.php.sample nutzt define('DB_USERNAME', '') - die leeren Strings
+# befuellen (NICHT den Konstantennamen per s/USERNAME/.../ zerstoeren).
 if [ ! -f "${APP_DIR}/dbv/config.php" ] && [ -f "${APP_DIR}/dbv/config.php.sample" ]; then
   cp "${APP_DIR}/dbv/config.php.sample" "${APP_DIR}/dbv/config.php"
-  sed -i -e "s/USERNAME/${DB_USER}/" -e "s/PASSWORD/${DB_PASS}/" -e "s/DATABASE/${DB_NAME}/" \
-         "${APP_DIR}/dbv/config.php" || true
+  sed -i \
+    -e "s#define('DB_HOST', '')#define('DB_HOST', 'localhost')#" \
+    -e "s#define('DB_USERNAME', '')#define('DB_USERNAME', '${DB_USER}')#" \
+    -e "s#define('DB_PASSWORD', '')#define('DB_PASSWORD', '${DB_PASS}')#" \
+    -e "s#define('DB_NAME', '')#define('DB_NAME', '${DB_NAME}')#" \
+    "${APP_DIR}/dbv/config.php" || true
 fi
 chown -R www-data:www-data "$APP_DIR" || true
 

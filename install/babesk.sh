@@ -167,9 +167,19 @@ export LC_ALL=C
 
 echo "[inner] apt update + Installation der Abhängigkeiten (PHP, MariaDB, git, ufw) ..."
 apt-get update
+# In LXC scheitert das Starten von Diensten im apt-Postinst (kein systemd als
+# PID 1 beim Paket-Setup) -> 'Job for mariadb.service failed' bricht unter
+# 'set -e' das ganze Script ab. policy-rc.d (exit 101) verbietet das Auto-Starten
+# während der Installation; wir starten MariaDB danach selbst (siehe unten).
+cat > /usr/sbin/policy-rc.d <<'POL'
+#!/bin/sh
+exit 101
+POL
+chmod +x /usr/sbin/policy-rc.d
 apt-get install -y --no-install-recommends \
   php-cli php-gd php-mysql php-mbstring php-xml php-curl php-zip \
-  mariadb-server git curl ca-certificates ufw apache2
+  mariadb-server git curl ca-certificates ufw
+rm -f /usr/sbin/policy-rc.d
 
 echo "[inner] MariaDB vorbereiten und starten ..."
 # In LXC scheitert 'systemctl start mariadb' gern an fehlendem /run/mysqld.
@@ -227,7 +237,7 @@ cat > "/etc/systemd/system/${APP_NAME}.service" <<UNIT
 [Unit]
 Description=babesk - Bargeldloses Bestellsystem für Schulkantinen
 After=network-online.target mariadb.service
-Wants=network-online.target
+Wants=network-online.target mariadb.service
 
 [Service]
 Type=simple

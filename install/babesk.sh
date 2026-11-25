@@ -184,6 +184,29 @@ rm -f /usr/sbin/policy-rc.d
 echo "[inner] MariaDB vorbereiten und starten ..."
 # In LXC scheitert 'systemctl start mariadb' gern an fehlendem /run/mysqld.
 mkdir -p /run/mysqld && chown mysql:mysql /run/mysqld
+# In (unprivilegierten) LXC-Containern kann systemd keine Mount-Namespaces
+# aufsetzen -> MariaDB startet mit status=226/NAMESPACE nicht. Das
+# Sandboxing/Hardening der Unit per Drop-in abschalten.
+mkdir -p /etc/systemd/system/mariadb.service.d
+cat > /etc/systemd/system/mariadb.service.d/override.conf <<'OVR'
+[Service]
+ProtectSystem=
+ProtectHome=
+PrivateDevices=false
+PrivateTmp=false
+PrivateIPC=false
+ProtectKernelTunables=false
+ProtectKernelLogs=false
+ProtectControlGroups=false
+ProtectClock=false
+ProtectHostname=false
+ReadWritePaths=
+RestrictAddressFamilies=
+MemoryDenyWriteExecute=false
+LockPersonality=false
+SystemCallFilter=
+OVR
+systemctl daemon-reload
 systemctl enable mariadb 2>/dev/null || true
 if ! systemctl start mariadb 2>/dev/null; then
   echo "[inner] systemctl start mariadb fehlgeschlagen, Fallback: service mariadb start ..."

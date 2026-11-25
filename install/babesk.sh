@@ -280,6 +280,31 @@ if [ ! -f "${APP_DIR}/dbv/config.php" ] && [ -f "${APP_DIR}/dbv/config.php.sampl
 fi
 chown -R www-data:www-data "$APP_DIR" || true
 
+echo "[inner] PHP-8-Polyfill für legacy-Code (create_function/each) schreiben ..."
+cat > "${APP_DIR}/php8-polyfill.php" <<'PHP'
+<?php
+// babesk (2015) und die gebündelte alte Smarty nutzen Funktionen, die in PHP 8
+// entfernt wurden. Dieses Polyfill stellt sie wieder bereit, damit der
+// legacy-Code auf dem mitgelieferten PHP 8.2 läuft (kein EOL-PHP-Downgrade).
+if (!function_exists('create_function')) {
+    function create_function($args, $code) {
+        return eval('return function(' . $args . ') {' . $code . '};');
+    }
+}
+if (!function_exists('each')) {
+    function each(&$array) {
+        $key = key($array);
+        if ($key === null) {
+            return false;
+        }
+        $value = current($array);
+        next($array);
+        return array(1 => $value, 'value' => $value, 0 => $key, 'key' => $key);
+    }
+}
+PHP
+chown www-data:www-data "${APP_DIR}/php8-polyfill.php" || true
+
 echo "[inner] systemd-Unit ${APP_NAME}.service einrichten ..."
 cat > "/etc/systemd/system/${APP_NAME}.service" <<UNIT
 [Unit]
@@ -292,7 +317,7 @@ Type=simple
 User=www-data
 Group=www-data
 WorkingDirectory=${APP_DIR}/code
-ExecStart=/usr/bin/php -S 0.0.0.0:${APP_PORT} -t ${APP_DIR}/code
+ExecStart=/usr/bin/php -d auto_prepend_file=${APP_DIR}/php8-polyfill.php -S 0.0.0.0:${APP_PORT} -t ${APP_DIR}/code
 Restart=always
 RestartSec=5
 
@@ -309,6 +334,12 @@ ufw --force enable || true
 echo "[inner] Verifikation im Container ..."
 systemctl is-active "${APP_NAME}"
 curl -fsS -o /dev/null -w "[inner] lokale Web-UI: HTTP %{http_code}\n" "http://localhost:${APP_PORT}/"
+# Gegenprobe: legacy-Code darf keinen PHP-Fatal auf der Admin-Seite werfen.
+if curl -fsS "http://localhost:${APP_PORT}/administrator/" 2>/dev/null | grep -qiE 'Fatal error|Uncaught'; then
+  echo "[inner] WARNUNG: PHP-Fehler auf /administrator/ erkannt (legacy-Code evtl. nicht PHP-8-kompatibel)."
+else
+  echo "[inner] Admin-Seite ohne PHP-Fatal erreichbar."
+fi
 INNER
 }
 

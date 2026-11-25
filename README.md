@@ -42,7 +42,7 @@ BABESK_CT_ID=120 BABESK_NET="10.0.0.50/24,gw=10.0.0.1" \
 1. Prüft Host (root, `pct`, Template, Storage).
 2. Vergibt die nächste freie CT-ID (oder nimmt `BABESK_CT_ID`).
 3. Erstellt den LXC (unprivileged, `onboot: 1`, Hostname `babesk`) und startet ihn.
-4. Installiert im Container: PHP + Extensions, MariaDB, git, ufw; legt DB `babesk` + User an; klont das Repo nach `/opt/babesk`; erzeugt `databaseValues.php` / `config.php` aus den Vorlagen.
+4. Installiert im Container: PHP + Extensions, MariaDB, git, ufw; legt DB `babesk` + User an; klont das Repo nach `/opt/babesk`; erzeugt `databaseValues.php` / `config.php` aus den Vorlagen; schreibt ein PHP-8-Polyfill (`create_function`/`each`), das per `auto_prepend_file` den legacy-Code auf PHP 8.2 lauffähig macht.
 5. Richtet `babesk.service` ein (PHP-Server auf `0.0.0.0:8080`, `Restart=always`, `After=network-online.target`), aktiviert ihn, öffnet Port 8080 in der Container-Firewall.
 6. Verifiziert: `systemctl is-active babesk` und HTTP-Check auf `localhost:8080`, gibt die finale URL `http://<CT-IP>:8080/` aus.
 

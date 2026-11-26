@@ -303,28 +303,39 @@ echo "[inner] Datenbank automatisch einspielen (dbv-Revisions 1..N) ..."
 find "${APP_DIR}/dbv/data" -name '*.sql' \
   -exec sed -i 's/DEFINER=`root`@`localhost`/DEFINER=`babesk`@`localhost`/g' {} + 2>/dev/null || true
 import_ok=1
-{
-  echo "SET FOREIGN_KEY_CHECKS=0;"
-  echo "SET NAMES utf8mb4;"
-  for d in $(ls "${APP_DIR}/dbv/data/revisions" 2>/dev/null | sort -n); do
-    for f in "${APP_DIR}"/dbv/data/revisions/"$d"/*.sql; do
-      [ -f "$f" ] || continue
-      if grep -qiE '(^|[^A-Za-z_])BEGIN([^A-Za-z_]|$)' "$f"; then
-        printf 'DELIMITER ;;\n'; cat "$f"; printf '\n;;\nDELIMITER ;\n'
-      else
-        cat "$f"; printf ';\n'
-      fi
-    done
+import_err="$(mktemp)"
+fail_list=""
+# Pro Datei importieren: ein Fehler stoppt nicht alles, sondern wird protokolliert
+# (welche Datei + mysql-Meldung). FK-Checks pro Verbindung aus.
+for d in $(ls "${APP_DIR}/dbv/data/revisions" 2>/dev/null | sort -n); do
+  for f in "${APP_DIR}"/dbv/data/revisions/"$d"/*.sql; do
+    [ -f "$f" ] || continue
+    if grep -qiE '(^|[^A-Za-z_])BEGIN([^A-Za-z_]|$)' "$f"; then
+      { echo "SET FOREIGN_KEY_CHECKS=0;"; printf 'DELIMITER ;;\n'; cat "$f"; printf '\n;;\nDELIMITER ;\n'; } \
+        | mysql -u root "$DB_NAME" 2>>"$import_err" \
+        || { import_ok=0; fail_list="$fail_list $d/$(basename "$f")"; }
+    else
+      { echo "SET FOREIGN_KEY_CHECKS=0;"; cat "$f"; printf ';\n'; } \
+        | mysql -u root "$DB_NAME" 2>>"$import_err" \
+        || { import_ok=0; fail_list="$fail_list $d/$(basename "$f")"; }
+    fi
   done
-  echo "SET FOREIGN_KEY_CHECKS=1;"
-} | mysql -u root "$DB_NAME" || import_ok=0
+done
 
 if [ "$import_ok" = "1" ] && mysql -u root -N -e "SELECT COUNT(*) FROM SystemUsers;" "$DB_NAME" >/dev/null 2>&1; then
   echo "[inner] Datenbank fertig. Default-Login: admin / admin"
 else
-  echo "[inner] Auto-Import fehlgeschlagen -> Fallback: dbv im Browser (URL /dbv/, Login dbv/dbv)."
-  mysql -u root -e "DROP DATABASE IF EXISTS \`${DB_NAME}\`; CREATE DATABASE \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'localhost'; FLUSH PRIVILEGES;" 2>/dev/null || true
+  echo "[inner] Auto-Import unvollständig. Fehlgeschlagene Dateien:${fail_list:- (keine, aber SystemUsers leer)}"
+  echo "[inner] Letzte mysql-Fehler:"
+  tail -n 20 "$import_err" 2>/dev/null || true
+  echo "[inner] Fallback: dbv im Browser (URL /dbv/, Login dbv/dbv) - dort Revisions anwenden."
+  # Nur leeren, wenn GAR NICHTS importiert wurde (partiellen Stand nicht zerstoeren).
+  tbls=$(mysql -u root -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='${DB_NAME}';" 2>/dev/null || echo 0)
+  if [ "${tbls:-0}" = "0" ]; then
+    mysql -u root -e "DROP DATABASE IF EXISTS \`${DB_NAME}\`; CREATE DATABASE \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'localhost'; FLUSH PRIVILEGES;" 2>/dev/null || true
+  fi
 fi
+rm -f "$import_err" 2>/dev/null || true
 
 # dbv im Web-Root erreichbar machen (Fallback-Installer) + freundliche Startseite.
 ln -sfn "${APP_DIR}/dbv" "${APP_DIR}/code/dbv" 2>/dev/null || true

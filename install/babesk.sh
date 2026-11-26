@@ -302,6 +302,14 @@ echo "[inner] Datenbank automatisch einspielen (dbv-Revisions 1..N) ..."
 # der als App-User laeuft; root-Import darf beide setzen).
 find "${APP_DIR}/dbv/data" -name '*.sql' \
   -exec sed -i 's/DEFINER=`root`@`localhost`/DEFINER=`babesk`@`localhost`/g' {} + 2>/dev/null || true
+# Revision 63 hardcodet den Entwickler-DB-Namen 'c1babesk' -> auf echten DB-Namen.
+find "${APP_DIR}/dbv/data" -name '*.sql' \
+  -exec sed -i "s/c1babesk/${DB_NAME}/g" {} + 2>/dev/null || true
+# rev21 benennt GroupModuleRights -> SystemGroupModuleRights um. Spaetere
+# Revisionen (22/23) nutzen aber noch den ALTEN Namen -> statt Rename eine KOPIE
+# anlegen, damit beide Tabellen existieren (rev25+ braucht den neuen Namen).
+find "${APP_DIR}/dbv/data" -name '*.sql' -exec \
+  sed -i 's#RENAME TABLE `GroupModuleRights` TO `SystemGroupModuleRights`;#CREATE TABLE IF NOT EXISTS `SystemGroupModuleRights` LIKE `GroupModuleRights`; INSERT INTO `SystemGroupModuleRights` SELECT * FROM `GroupModuleRights`;#' {} + 2>/dev/null || true
 import_ok=1
 import_err="$(mktemp)"
 fail_list=""
@@ -312,11 +320,11 @@ for d in $(ls "${APP_DIR}/dbv/data/revisions" 2>/dev/null | sort -n); do
     [ -f "$f" ] || continue
     if grep -qiE '(^|[^A-Za-z_])BEGIN([^A-Za-z_]|$)' "$f"; then
       { echo "SET FOREIGN_KEY_CHECKS=0;"; printf 'DELIMITER ;;\n'; cat "$f"; printf '\n;;\nDELIMITER ;\n'; } \
-        | mysql -u root "$DB_NAME" 2>>"$import_err" \
+        | mysql -u root --force "$DB_NAME" 2>>"$import_err" \
         || { import_ok=0; fail_list="$fail_list $d/$(basename "$f")"; }
     else
       { echo "SET FOREIGN_KEY_CHECKS=0;"; cat "$f"; printf ';\n'; } \
-        | mysql -u root "$DB_NAME" 2>>"$import_err" \
+        | mysql -u root --force "$DB_NAME" 2>>"$import_err" \
         || { import_ok=0; fail_list="$fail_list $d/$(basename "$f")"; }
     fi
   done

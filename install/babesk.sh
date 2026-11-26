@@ -293,7 +293,7 @@ chown -R www-data:www-data "$APP_DIR" || true
 
 # ---------------- Datenbank automatisch einspielen ----------------
 # babesk "installiert" sich ueber die dbv-Revisions (Migrationen 1..N): Sie
-# bauen aus einer leeren DB den finalen Stand inkl. Default-Admin (admin/admin)
+# bauen aus einer leeren DB den finalen Stand inkl. Default-Admin (administrator/root)
 # auf und legen die Stored Procedures selbst an. Import als root (unix_socket),
 # Fremdschluessel-Checks aus (Reihenfolge egal), Routinen per DELIMITER wrappen.
 # Schlaegt etwas fehl, wird die DB geleert und auf dbv (Browser) zurueckgefallen.
@@ -331,7 +331,7 @@ for d in $(ls "${APP_DIR}/dbv/data/revisions" 2>/dev/null | sort -n); do
 done
 
 if [ "$import_ok" = "1" ] && mysql -u root -N -e "SELECT COUNT(*) FROM SystemUsers;" "$DB_NAME" >/dev/null 2>&1; then
-  echo "[inner] Datenbank fertig. Default-Login: admin / admin"
+  echo "[inner] Datenbank fertig. Default-Login: administrator / root"
 else
   echo "[inner] Auto-Import unvollständig. Fehlgeschlagene Dateien:${fail_list:- (keine, aber SystemUsers leer)}"
   echo "[inner] Letzte mysql-Fehler:"
@@ -369,7 +369,7 @@ header('Content-Type: text/html; charset=utf-8');
  <a class="btn" href="web/index.php">Web-Frontend öffnen</a>
  <a class="btn alt" href="administrator/index.php">Administrator-Frontend</a>
  <a class="btn alt" href="dbv/">Datenbank-Setup (nur falls oben kein Login klappt)</a>
- <p class="hint">Administrator-Login nach dem Setup: <code>admin</code> / <code>admin</code>.
+ <p class="hint">Administrator-Login nach dem Setup: <code>administrator</code> / <code>root</code>.
  <?php if (!$installed): ?>Die Datenbank ist noch nicht eingerichtet — bitte oben „Datenbank-Setup" ausführen und die Revisions anwenden.<?php endif; ?></p>
 </div></body></html>
 INDEX
@@ -412,7 +412,7 @@ Type=simple
 User=www-data
 Group=www-data
 WorkingDirectory=${APP_DIR}/code
-ExecStart=/usr/bin/php -d auto_prepend_file=${APP_DIR}/php8-polyfill.php -S 0.0.0.0:${APP_PORT} -t ${APP_DIR}/code
+ExecStart=/usr/bin/php -d auto_prepend_file=${APP_DIR}/php8-polyfill.php -d error_reporting=22519 -S 0.0.0.0:${APP_PORT} -t ${APP_DIR}/code
 Restart=always
 RestartSec=5
 
@@ -479,7 +479,7 @@ verify() {
   echo " babesk wurde installiert."
   echo "   Container-ID : $CT_ID  (Hostname: $CT_HOSTNAME, onboot=1)"
   echo "   Web-UI       : http://${ip}:${APP_PORT}/"
-  echo "   Admin-Login  : http://${ip}:${APP_PORT}/administrator/  (Default: admin / admin)"
+  echo "   Admin-Login  : http://${ip}:${APP_PORT}/administrator/  (Default: administrator / root)"
   echo "   DB-Setup     : bei Auto-Import-FEHLER -> http://${ip}:${APP_PORT}/dbv/ (Login dbv/dbv)"
   echo "   DB           : ${DB_NAME} / Benutzer: ${DB_USER} (Passwort wird nur bei Erzeugung generiert)"
   echo "   Service      : systemctl status ${APP_NAME} (im CT: pct exec ${CT_ID} -- systemctl status ${APP_NAME})"

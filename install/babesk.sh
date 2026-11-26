@@ -397,6 +397,16 @@ if (!function_exists('each')) {
         return array(1 => $value, 'value' => $value, 0 => $key, 'key' => $key);
     }
 }
+// mcrypt wurde in PHP 7.2 entfernt; babesks PasswordHash braucht mcrypt_create_iv
+// fuer das Salt (beim md5->pbkdf2-Upgrade des Passworts).
+if (!defined('MCRYPT_DEV_URANDOM')) define('MCRYPT_DEV_URANDOM', 0);
+if (!defined('MCRYPT_DEV_RANDOM')) define('MCRYPT_DEV_RANDOM', 1);
+if (!defined('MCRYPT_RAND')) define('MCRYPT_RAND', 2);
+if (!function_exists('mcrypt_create_iv')) {
+    function mcrypt_create_iv($size, $source = 0) {
+        return random_bytes($size);
+    }
+}
 PHP
 chown www-data:www-data "${APP_DIR}/php8-polyfill.php" || true
 

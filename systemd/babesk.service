@@ -8,7 +8,7 @@ Type=simple
 User=www-data
 Group=www-data
 WorkingDirectory=/opt/babesk/code
-ExecStart=/usr/bin/php -d auto_prepend_file=/opt/babesk/php8-polyfill.php -d error_reporting=22519 -S 0.0.0.0:8080 -t /opt/babesk/code
+ExecStart=/usr/bin/php7.4 -d auto_prepend_file=/opt/babesk/php8-polyfill.php -d error_reporting=22519 -S 0.0.0.0:8080 -t /opt/babesk/code
 Restart=always
 RestartSec=5
 

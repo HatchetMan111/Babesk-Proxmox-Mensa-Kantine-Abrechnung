@@ -168,7 +168,16 @@ export LC_ALL=C
 # sonst bricht 'set -u' bei der Unit-Erzeugung ab.
 APP_NAME="${APP_NAME:-babesk}"
 
-echo "[inner] apt update + Installation der Abhängigkeiten (PHP, MariaDB, git, ufw) ..."
+echo "[inner] apt update + PHP 7.4 (sury) + MariaDB, git, ufw installieren ..."
+# babesk ist PHP-5.3-era Code. Auf PHP 8.2 hagelt es Altlasten (create_function,
+# each, count(null) = Fatal). PHP 7.4 macht den Grossteil davon harmlos
+# (nur deprecated/Warnung). Debian 12 liefert nur 8.2 -> sury-Repo fuer 7.4.
+apt-get update
+apt-get install -y --no-install-recommends ca-certificates curl gnupg2 apt-transport-https
+install -d -m 0755 /usr/share/keyrings
+curl -fsSL https://packages.sury.org/php/apt.gpg -o /usr/share/keyrings/deb.sury.org-php.gpg
+echo "deb [signed-by=/usr/share/keyrings/deb.sury.org-php.gpg] https://packages.sury.org/php/ bookworm main" \
+  > /etc/apt/sources.list.d/sury-php.list
 apt-get update
 # In LXC scheitert das Starten von Diensten im apt-Postinst (kein systemd als
 # PID 1 beim Paket-Setup) -> 'Job for mariadb.service failed' bricht unter
@@ -180,9 +189,14 @@ exit 101
 POL
 chmod +x /usr/sbin/policy-rc.d
 apt-get install -y --no-install-recommends \
-  php-cli php-gd php-mysql php-mbstring php-xml php-curl php-zip \
+  php7.4-cli php7.4-mysql php7.4-gd php7.4-mbstring php7.4-xml php7.4-curl php7.4-zip \
   mariadb-server git curl ca-certificates ufw
 rm -f /usr/sbin/policy-rc.d
+# 'php' soll auf 7.4 zeigen (nicht auf ein evtl. vorhandenes 8.2).
+update-alternatives --set php /usr/bin/php7.4 2>/dev/null || true
+update-alternatives --set phar /usr/bin/phar7.4 2>/dev/null || true
+update-alternatives --set phar.phar /usr/bin/phar.phar7.4 2>/dev/null || true
+php -v | head -n1
 
 echo "[inner] MariaDB vorbereiten und starten ..."
 # In LXC scheitert 'systemctl start mariadb' gern an fehlendem /run/mysqld.
@@ -422,7 +436,7 @@ Type=simple
 User=www-data
 Group=www-data
 WorkingDirectory=${APP_DIR}/code
-ExecStart=/usr/bin/php -d auto_prepend_file=${APP_DIR}/php8-polyfill.php -d error_reporting=22519 -S 0.0.0.0:${APP_PORT} -t ${APP_DIR}/code
+ExecStart=/usr/bin/php7.4 -d auto_prepend_file=${APP_DIR}/php8-polyfill.php -d error_reporting=22519 -S 0.0.0.0:${APP_PORT} -t ${APP_DIR}/code
 Restart=always
 RestartSec=5
 

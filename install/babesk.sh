@@ -6,7 +6,7 @@
 # https://github.com/LinuCC/babesk) als LXC-Container auf einem Proxmox VE Host.
 #
 # Einzeiler (als root auf dem Proxmox-Host ausführen, an Commit gepinnt gegen CDN-Cache):
-#   bash -c "$(wget -qLO - https://raw.githubusercontent.com/HatchetMan111/Babesk-Proxmox-Mensa-Kantine-Abrechnung/38151eda1421fe449a915ecaa15f5ad4aa19a5dd/install/babesk.sh)"
+#   bash -c "$(wget -qLO - https://raw.githubusercontent.com/HatchetMan111/Babesk-Proxmox-Mensa-Kantine-Abrechnung/65fa39c3bb8f5458799eb8879945f2a6f379b4f1/install/babesk.sh)"
 # ungepinnt (main, kann CDN-Cache liefern):
 #   bash -c "$(wget -qLO - https://raw.githubusercontent.com/HatchetMan111/Babesk-Proxmox-Mensa-Kantine-Abrechnung/main/install/babesk.sh)"
 #

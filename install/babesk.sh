@@ -303,6 +303,12 @@ if [ ! -f "${APP_DIR}/dbv/config.php" ] && [ -f "${APP_DIR}/dbv/config.php.sampl
     -e "s#define('DB_NAME', '')#define('DB_NAME', '${DB_NAME}')#" \
     "${APP_DIR}/dbv/config.php" || true
 fi
+# babesk setzt selbst error_reporting(E_ALL)+display_errors(1) und ueberschreibt
+# damit das -d aus dem Dienst -> Deprecated/Notice-Spam (create_function, each)
+# landet im HTML und kann sogar den Login-Redirect (Header) zerschiessen.
+# error_reporting im Code auf E_ALL ohne Deprecated/Notice/Strict umstellen.
+find "${APP_DIR}/code" -name '*.php' -exec \
+  sed -i 's/error_reporting(E_ALL);/error_reporting(E_ALL \& ~E_DEPRECATED \& ~E_NOTICE \& ~E_STRICT);/g' {} + 2>/dev/null || true
 chown -R www-data:www-data "$APP_DIR" || true
 
 # ---------------- Datenbank automatisch einspielen ----------------

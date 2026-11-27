@@ -27,7 +27,10 @@ set -euo pipefail
 # ---------------- Konfiguration ----------------
 APP_NAME="babesk"
 APP_PORT="${BABESK_PORT:-8080}"
+LEGACY_PORT="${BABESK_LEGACY_PORT:-8081}"
 REPO_URL="${BABESK_REPO:-https://github.com/LinuCC/babesk.git}"
+MODERN_REPO_URL="${BABESK_MODERN_REPO:-https://github.com/HatchetMan111/Babesk-Proxmox-Mensa-Kantine-Abrechnung.git}"
+MODERN_DIR="/opt/babesk-modern"
 APP_DIR="/opt/babesk"
 CT_HOSTNAME="${BABESK_HOSTNAME:-babesk}"
 CT_ID="${BABESK_CT_ID:-}"
@@ -446,7 +449,7 @@ Type=simple
 User=www-data
 Group=www-data
 WorkingDirectory=${APP_DIR}/code
-ExecStart=/usr/bin/php7.4 -d auto_prepend_file=${APP_DIR}/php8-polyfill.php -d error_reporting=22519 -S 0.0.0.0:${APP_PORT} -t ${APP_DIR}/code
+ExecStart=/usr/bin/php7.4 -d auto_prepend_file=${APP_DIR}/php8-polyfill.php -d error_reporting=22519 -S 0.0.0.0:${LEGACY_PORT} -t ${APP_DIR}/code
 Restart=always
 RestartSec=5
 
@@ -456,18 +459,62 @@ UNIT
 systemctl daemon-reload
 systemctl enable --now "${APP_NAME}"
 
-echo "[inner] Firewall: Port ${APP_PORT}/tcp öffnen ..."
-ufw allow "${APP_PORT}/tcp" || true
+echo "[inner] Firewall: legacy-Port ${LEGACY_PORT}/tcp öffnen ..."
+ufw allow "${LEGACY_PORT}/tcp" || true
 ufw --force enable || true
 
-echo "[inner] Verifikation im Container ..."
-systemctl is-active "${APP_NAME}"
-curl -fsS -o /dev/null -w "[inner] lokale Web-UI: HTTP %{http_code}\n" "http://localhost:${APP_PORT}/"
-# Gegenprobe: legacy-Code darf keinen PHP-Fatal auf der Admin-Seite werfen.
-if curl -fsS "http://localhost:${APP_PORT}/administrator/" 2>/dev/null | grep -qiE 'Fatal error|Uncaught'; then
-  echo "[inner] WARNUNG: PHP-Fehler auf /administrator/ erkannt (legacy-Code evtl. nicht PHP-8-kompatibel)."
+# ---------------- Moderne UI (React + FastAPI) deployen ----------------
+echo "[inner] Moderne UI (React + FastAPI) nach ${MODERN_DIR} deployen ..."
+git clone --depth 1 "${MODERN_REPO_URL}" /tmp/babesk-modern-src 2>/dev/null || true
+mkdir -p "${MODERN_DIR}/web"
+cp -r /tmp/babesk-modern-src/modern/api "${MODERN_DIR}/api" 2>/dev/null || true
+cp -r /tmp/babesk-modern-src/modern/web/dist "${MODERN_DIR}/web/dist" 2>/dev/null || true
+rm -rf /tmp/babesk-modern-src
+if [ -f "${MODERN_DIR}/api/main.py" ] && [ -d "${MODERN_DIR}/web/dist" ]; then
+  apt-get install -y --no-install-recommends python3-venv python3-pip >/dev/null 2>&1 || true
+  python3 -m venv "${MODERN_DIR}/venv"
+  "${MODERN_DIR}/venv/bin/pip" install --no-cache-dir -q -r "${MODERN_DIR}/api/requirements.txt" 2>&1 | tail -n 2 || true
+  [ -f "${MODERN_DIR}/jwt_secret" ] || openssl rand -hex 32 > "${MODERN_DIR}/jwt_secret"
+  JWT_SECRET="$(cat "${MODERN_DIR}/jwt_secret")"
+  cat > /etc/systemd/system/babesk-modern.service <<UNIT2
+[Unit]
+Description=babesk modern (React + FastAPI)
+After=network-online.target mariadb.service
+Wants=network-online.target mariadb.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=${MODERN_DIR}/api
+Environment=BABESK_DB_HOST=localhost BABESK_DB_NAME=${DB_NAME} BABESK_DB_USER=${DB_USER} BABESK_DB_PASS=${DB_PASS} BABESK_JWT_SECRET=${JWT_SECRET} BABESK_WEB_DIR=${MODERN_DIR}/web/dist
+ExecStart=${MODERN_DIR}/venv/bin/uvicorn main:app --host 0.0.0.0 --port ${APP_PORT}
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+UNIT2
+  chown -R www-data:www-data "${MODERN_DIR}" 2>/dev/null || true
+  systemctl daemon-reload
+  systemctl enable --now babesk-modern 2>/dev/null || true
+  ufw allow "${APP_PORT}/tcp" || true
+  echo "[inner] Moderne UI auf Port ${APP_PORT} deployed."
 else
-  echo "[inner] Admin-Seite ohne PHP-Fatal erreichbar."
+  echo "[inner] WARNUNG: Moderne UI nicht gefunden (Repo ${MODERN_REPO_URL}) - nur legacy aktiv."
+fi
+
+echo "[inner] Verifikation im Container ..."
+systemctl is-active "${APP_NAME}" || true
+curl -fsS -o /dev/null -w "[inner] legacy Web-UI (Port ${LEGACY_PORT}): HTTP %{http_code}\n" "http://localhost:${LEGACY_PORT}/" || true
+if systemctl is-active babesk-modern >/dev/null 2>&1; then
+  curl -fsS -o /dev/null -w "[inner] moderne UI (Port ${APP_PORT}): HTTP %{http_code}\n" "http://localhost:${APP_PORT}/" || true
+fi
+# Gegenprobe: legacy-Code darf keinen PHP-Fatal auf der Admin-Seite werfen.
+if curl -fsS "http://localhost:${LEGACY_PORT}/administrator/" 2>/dev/null | grep -qiE 'Fatal error|Uncaught'; then
+  echo "[inner] WARNUNG: PHP-Fehler auf /administrator/ erkannt."
+else
+  echo "[inner] legacy Admin-Seite ohne PHP-Fatal erreichbar."
 fi
 INNER
 }
@@ -492,7 +539,8 @@ run_inner_script() {
   pct exec "$CT_ID" -- test -f /tmp/babesk-inner.sh 2>/dev/null \
     || die "Inneres Script konnte nicht in CT $CT_ID abgelegt werden (pct push). Logs: pct enter $CT_ID"
   pct exec "$CT_ID" -- env "DB_NAME=$DB_NAME" "DB_USER=$DB_USER" "DB_PASS=$DB_PASS" \
-    "APP_DIR=$APP_DIR" "APP_PORT=$APP_PORT" "REPO_URL=$REPO_URL" bash /tmp/babesk-inner.sh
+    "APP_DIR=$APP_DIR" "APP_PORT=$APP_PORT" "LEGACY_PORT=$LEGACY_PORT" "REPO_URL=$REPO_URL" \
+    "MODERN_REPO_URL=$MODERN_REPO_URL" "MODERN_DIR=$MODERN_DIR" bash /tmp/babesk-inner.sh
   pct exec "$CT_ID" -- rm -f /tmp/babesk-inner.sh
 }
 
@@ -512,11 +560,11 @@ verify() {
   echo "==============================================================="
   echo " babesk wurde installiert."
   echo "   Container-ID : $CT_ID  (Hostname: $CT_HOSTNAME, onboot=1)"
-  echo "   Web-UI       : http://${ip}:${APP_PORT}/"
-  echo "   Admin-Login  : http://${ip}:${APP_PORT}/administrator/  (Default: administrator / root)"
-  echo "   DB-Setup     : bei Auto-Import-FEHLER -> http://${ip}:${APP_PORT}/dbv/ (Login dbv/dbv)"
+  echo "   Moderne UI   : http://${ip}:${APP_PORT}/   (React + FastAPI, Login: administrator / root)"
+  echo "   Legacy-Admin : http://${ip}:${LEGACY_PORT}/administrator/   (PHP, gleicher Login)"
+  echo "   DB-Setup     : bei Auto-Import-FEHLER -> http://${ip}:${LEGACY_PORT}/dbv/ (Login dbv/dbv)"
   echo "   DB           : ${DB_NAME} / Benutzer: ${DB_USER} (Passwort wird nur bei Erzeugung generiert)"
-  echo "   Service      : systemctl status ${APP_NAME} (im CT: pct exec ${CT_ID} -- systemctl status ${APP_NAME})"
+  echo "   Dienste      : babesk-modern (Port ${APP_PORT}) + ${APP_NAME} (legacy, Port ${LEGACY_PORT})"
   echo "   Debug-Log    : BABESK_DEBUG=1 bash -x $0 2>&1 | tee babesk-install-debug.log"
   echo "==============================================================="
 }

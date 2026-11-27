@@ -2,6 +2,8 @@
 
 Installiert [babesk](https://github.com/LinuCC/babesk) (Bargeldloses Bestellsystem für Schulkantinen) als LXC-Container auf einem Proxmox VE Host. Idempotent, reboot-sicher (systemd-Service, `onboot: 1`), mit eigener Verifikation.
 
+**Moderne UI (React + FastAPI) inklusive:** Port `8080` = moderne React-SPA mit JSON-API (Login, Wochen-Speiseplan, Bestellung, Guthaben) direkt auf der babesk-MariaDB. Port `8081` = legacy-PHP-Admin (fallback). Login überall: `administrator` / `root`. Die API (`modern/api`, FastAPI) und das gebaute React-`dist` (`modern/web/dist`) liegen im Repo; der Installer deployt beides als `babesk-modern.service`.
+
 > Hinweis: Das Upstream-Repo ist legacy (letzte Commits 2015, Anforderungen PHP 5.3+/MySQL, UI in PHP/Smarty). Vor Produktivbetrieb bitte einen gepflegten Fork verwenden (`BABESK_REPO` setzen) oder modernisieren. Das mitgelieferte `frontend/` ist ein React/Vite-Startpunkt für eine moderne UI, die gegen das PHP-Backend spricht.
 
 ## Einzeiler (als root auf dem Proxmox-Host)
